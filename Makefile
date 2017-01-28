@@ -1,21 +1,25 @@
 ASM=nasm
-DISKW=dd
+CC=gcc
 VM=qemu-system-x86_64
-BOOTASM=src/boot.asm
-BOOTBIN=src/boot.bin
-BOOTFILE=src/boot.img
+
+BOOT=src/boot
+KERNEL=src/kernel
+BOOTFILE=src/image
 
 all: boot disk test
 
-boot: bootloader.asm
-	$(ASM) $(BOOTASM) -f bin -o $(BOOTBIN)
+boot:
+	$(ASM) $(BOOT).asm -f bin -o $(BOOT).bin
+	$(CC) -ffreestanding -c $(KERNEL).cpp -o $(KERNEL).bin
 	
-disk: $(BOOTBIN)
-	cd src && $(DISKW) if=/dev/zero of=blrl.img bs=1024 count=1440
-	cd src && $(DISKW) status=noxfer conv=notrunc if=$(BOOTBIN) of=$(BOOTFILE)
+	
+disk: boot
+	dd if=/dev/zero of=$(BOOTFILE).bin bs=512 count=2880
+	dd if=$(BOOT).bin of=$(BOOTFILE).bin conv=notrunc
+	dd if=$(KERNEL).bin of=$(BOOTFILE).bin conv=notrunc bs=512 seek=1
 	
 test:
-	cd src && $(VM) -drive format=raw,file=$(BOOTFILE),index=0,if=floppy
+	$(VM) -drive format=raw,file=$(BOOTFILE).bin,index=0,if=floppy
 
 clean:
-	cd src && rm *.bin *.img 
+	cd src && rm *.bin
