@@ -1,8 +1,9 @@
 ASM=nasm
-CC=g++
-VM=qemu-system-x86_64
+CC=gcc
+VM=qemu-system-i386
+KVERSION=001
 
-BOOT=src/loader
+BOOT=src/boot
 KERNEL=src/kernel
 LINKER=src/linker.ld
 BOOTFILE=src/image
@@ -10,17 +11,17 @@ BOOTFILE=src/image
 all: boot disk test
 
 boot:
-	$(ASM) -f elf $(BOOT).asm -o $(BOOT).o
-	$(CC) -c $(KERNEL).cpp -ffreestanding -nostdlib -fno-builtin -fno-rtti -fno-exceptions
-	LDEMULATION="elf_x86_64"
-	ld -T $(LINKER) -o $(KERNEL) $(BOOT).o $(KERNEL).o
-	
+	$(ASM) -f elf32 $(BOOT).asm -o $(BOOT).o
+	$(CC) -m32 -c $(KERNEL).c -o $(KERNEL).o
+	ld -m elf_i386 -T $(LINKER) -o kernel $(BOOT).o $(KERNEL).o
+
 disk: boot
-	cp $(KERNEL) iso/boot/kernel
-	grub-mkrescue iso --output=kernel.iso 
+	mv kernel kernel-$(KVERSION)
+	#grub-mkrescue iso --output=kernel.iso
 	
 test:
-	$(VM) -cdrom kernel.iso
+	$(VM) -kernel kernel-$(KVERSION)
 
 clean:
-	cd src && rm *.o *.bin
+	cd src && rm *.o
+	rm kernel

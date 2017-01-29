@@ -22,6 +22,7 @@ enum color
 };
 
 // Returns the color code of given fg and bg
+
 uint8_t get_color(enum color fg, enum color bg)
 {
 	return fg | bg << 4;
@@ -54,10 +55,12 @@ uint16_t* video_mem;
 
 
 // Clears the video_mem
-void clear()
+void clear(void)
 {
-        for (size_t row = 0; row < VHEIGHT; row++) {
-                for (size_t col = 0; col < VWIDTH; col++) {
+	size_t row;
+	size_t col;
+        for (row = 0; row < VHEIGHT; row++) {
+                for (col = 0; col < VWIDTH; col++) {
                         video_mem[row*VWIDTH+col] = videoMemChar(' ', console_col);
                 }
         }
@@ -65,7 +68,7 @@ void clear()
 
 
 // Initialize kernel
-void kernel_init()
+void kernel_init(void)
 {
 	// init kernel variables
 	cursor_col = 0;
@@ -89,7 +92,7 @@ void printChar(char c, uint8_t col, size_t x, size_t y)
 	video_mem[y*VHEIGHT+x] = videoMemChar(c,col);
 }
 
-void printChar(char c)
+void putChar(char c)
 {
 	printChar(c, console_col, cursor_col, cursor_row);
 	if (++cursor_col == VWIDTH) {
@@ -104,12 +107,13 @@ void printChar(char c)
 void printf(const char* str)
 {
 	size_t strLen = len(str);
-	for (size_t i = 0; i < strLen; i++)
-		printChar(str[i]);
+	size_t i;
+	for (i = 0; i < strLen; i++)
+		putChar(str[i]);
 }
 
 // Main function
-void kernel_main()
+void kernel_main(void)
 {
 	// initialize the kernel
 	kernel_init();

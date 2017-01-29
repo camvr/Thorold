@@ -1,25 +1,21 @@
-[bits 32]
+bits 32
+section .text
+	; Multiboot header
+	align 4
+	dd 0x1BADB002
+	dd 0x00
+	dd - (0x1BADB002 + 0x00)
+
 global start
-extern _kernel_main
-
-; Preparing for GRUB
-section .mbHeader
-
-align 0x4
-
-; Multiboot header setup
-MODULEALIGN equ 1<<0
-MEMINFO     equ 1<<1
-FLAGS       equ MODULEALIGN | MEMINFO
-MAGIC       equ 0x1BADB002
-CHECKSUM    equ -(MAGIC + FLAGS)
-
-MultiBootHeader:
-	dd MAGIC
-	dd FLAGS
-	dd CHECKSUM
+extern kernel_main
 
 ; calling the kernel
 start:
-	push ebx
-	call _kernel_main
+	cli
+	mov esp, stack_alloc
+	call kernel_main
+	hlt
+
+section .bss
+resb 8192
+stack_alloc:
