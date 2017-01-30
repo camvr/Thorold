@@ -2,6 +2,9 @@
 #include <stdint.h>
 #include "keyboard_map.h"
 
+
+/* KERNEL DEFINITIONS */
+
 #define VWIDTH 80
 #define VHEIGHT 25
 #define SCREENSIZE 2 * VWIDTH * VHEIGHT
@@ -14,35 +17,27 @@
 
 #define ENTER_KEY_CODE 0x1C
 
-extern unsigned char keyboard_map[128];
-extern void key_handler(void);
-extern char rport(unsigned short port);
-extern void wport(unsigned short port, unsigned char data);
-extern void load_idt(unsigned long *idt_p);
 
-size_t cursor_col = 0;
-size_t cursor_row = 0;
-uint8_t console_col = 0x0;
-uint16_t* video_mem = (uint16_t*)0xB8000;
+/* KERNEL VARIABLES AND CONSTS */
 
 enum color
 {
-	BLACK = 0x0,
-	BLUE = 0x1,
-	GREEN = 0x2,
-	CYAN = 0x3,
-	RED = 0x4,
-	MAGENTA = 0x5,
-	BROWN = 0x6,
-	LGREY = 0x7,
-	DGREY = 0x8,
-	LBLUE = 0x9,
-	LGREEN = 0xA,
-	LCYAN = 0xB,
-	LRED = 0xC,
-	LMAGENTA = 0xD,
-	LBROWN = 0xE,
-	WHITE = 0xF
+        BLACK = 0x0,
+        BLUE = 0x1,
+        GREEN = 0x2,
+        CYAN = 0x3,
+        RED = 0x4,
+        MAGENTA = 0x5,
+        BROWN = 0x6,
+        LGREY = 0x7,
+        DGREY = 0x8,
+        LBLUE = 0x9,
+        LGREEN = 0xA,
+        LCYAN = 0xB,
+        LRED = 0xC,
+        LMAGENTA = 0xD,
+        LBROWN = 0xE,
+        WHITE = 0xF
 };
 
 struct idt_entry
@@ -55,6 +50,20 @@ struct idt_entry
 };
 
 struct idt_entry IDT[IDT_SIZE];
+
+extern unsigned char keyboard_map[128];
+extern void key_handler(void);
+extern char rport(unsigned short port);
+extern void wport(unsigned short port, unsigned char data);
+extern void load_idt(unsigned long *idt_p);
+
+size_t cursor_col = 0;
+size_t cursor_row = 0;
+uint8_t console_col = 0x0;
+uint16_t* video_mem = (uint16_t*)0xB8000;
+char* command_in;
+
+/* KERNEL BASE FUNCTIONS */
 
 // Setup the IDT
 void idt_init(void)
@@ -126,6 +135,16 @@ size_t len(const char* string)
 	return length;
 }
 
+// NOT IN USE - Update the text mode cursor position
+void update_cursor(void)
+{
+	unsigned short tcursor_loc = (cursor_row*VWIDTH)+cursor_col;
+	wport(0x3D4, 0x0F);
+	wport(0x3D5, (unsigned char)(tcursor_loc & 0xFF));
+	wport(0x3D4, 0x0E);
+	wport(0x3D5, (unsigned char)((tcursor_loc >> 8) & 0xFF));
+}
+
 // Clears the video_mem
 void clear(void)
 {
@@ -146,6 +165,14 @@ void kernel_init(void)
 	console_col = get_color(LGREY, BLACK);
 	video_mem = (uint16_t*)0xB8000;
 	
+	// enable text mode cursor
+	/*
+	wport(0x3D4, 0x0A);
+	char tcursor_start = rport(0x3D5) & 0x1F;
+	wport(0x3D4, 0x0A);
+	wport(0x3D5, tcursor_start | 0x20);
+	*/
+
 	// Clear video_mem
 	clear();
 }
@@ -197,6 +224,7 @@ void putChar(char c, uint8_t col)
 			cursor_row = 0;
 		}
 	}
+	//update_cursor();
 }
 
 // Write string to the video_mem
@@ -211,6 +239,11 @@ void kprint(const char* str, uint8_t col)
 // Handles task of enter key
 void handleEnter(void)
 {
+	printnl();
+
+	// Command line
+	// call command parser
+	kprint(command_in, console_col);
 	printnl();
 	kprint("$ ", get_color(RED,BLACK));
 }
@@ -243,13 +276,14 @@ void key_handler_main(void)
 			return;
 		}
 
-		if (keycode == 0x08) {
+		if (keyboard_map[(unsigned char) keycode] == 0x08) {
 			handleBackspace();
 			return;
 		}
 		
 		// display typed character
 		putChar(keyboard_map[(unsigned char) keycode], console_col);
+		
 	}
 }
 
@@ -266,6 +300,7 @@ void kernel_main(void)
 	// init io
 	idt_init();
 	kb_init();
+
 	// hang the kernel
 	while(1);
 }
