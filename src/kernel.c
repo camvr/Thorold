@@ -11,6 +11,7 @@
 #define IDT_SIZE 256
 #define INT_GATE 0x8E
 #define KERNEL_CODE_SEG_OFFSET 0x08
+
 #define ENTER_KEY_CODE 0x1C
 
 extern unsigned char keyboard_map[128];
@@ -19,12 +20,10 @@ extern char rport(unsigned short port);
 extern void wport(unsigned short port, unsigned char data);
 extern void load_idt(unsigned long *idt_p);
 
-
 size_t cursor_col = 0;
 size_t cursor_row = 0;
 uint8_t console_col = 0x0;
 uint16_t* video_mem = (uint16_t*)0xB8000;
-
 
 enum color
 {
@@ -130,13 +129,11 @@ size_t len(const char* string)
 // Clears the video_mem
 void clear(void)
 {
-	size_t row;
-	size_t col;
-        for (row = 0; row < VHEIGHT; row++) {
-		for (col = 0; col < VWIDTH; col++) {
-                        video_mem[row*VWIDTH+col] = videoMemChar(' ', console_col);
-                }
-        }
+	size_t i = 0;
+	while (i < SCREENSIZE) {
+		video_mem[i++] = ' ';
+		video_mem[i++] =  console_col;
+	}
 }
 
 
@@ -159,23 +156,41 @@ void setConsoleColor(uint8_t col)
 	console_col = col;
 }
 
+// Handling scrolling the screen
+void scrollScreen(void)
+{
+	size_t pos = 0;
+	size_t offset = VWIDTH;
+	cursor_col = 0;
+	cursor_row = VHEIGHT - 1;
+	while (pos < SCREENSIZE) {
+		if (pos >= SCREENSIZE-(VWIDTH*2)) {
+			video_mem[pos++] = ' ';
+			video_mem[pos++] = console_col;
+		} else {
+			video_mem[pos++] = video_mem[offset++];
+			video_mem[pos++] = video_mem[offset++];
+		}
+	}
+}
+
 // Goes to newline
 void printnl(void)
 {
 	cursor_col = 0;
 	if (++cursor_row == VHEIGHT)
-		cursor_row = 0;
+		scrollScreen();
 }
 
 // Write char to the video_mem
 void printChar(char c, uint8_t col, size_t x, size_t y)
 {
-	video_mem[y*VHEIGHT+x] = videoMemChar(c,col);
+	video_mem[(y*VWIDTH)+x] = videoMemChar(c,col);
 }
 
-void putChar(char c)
+void putChar(char c, uint8_t col)
 {
-	printChar(c, console_col, cursor_col, cursor_row);
+	printChar(c, col, cursor_col, cursor_row);
 	if (++cursor_col == VWIDTH) {
 		cursor_col = 0;
 		if (++cursor_row == VHEIGHT) {
@@ -185,18 +200,27 @@ void putChar(char c)
 }
 
 // Write string to the video_mem
-void kprint(const char* str)
+void kprint(const char* str, uint8_t col)
 {
 	size_t strLen = len(str);
 	size_t i;
 	for (i = 0; i < strLen; i++)
-		putChar(str[i]);
+		putChar(str[i], col);
 }
 
 // Handles task of enter key
 void handleEnter(void)
 {
 	printnl();
+	kprint("$ ", get_color(RED,BLACK));
+}
+
+// Handles task of backspace
+void handleBackspace(void)
+{
+	if (--cursor_col == 1)
+		cursor_col = 2;
+	video_mem[(cursor_row*VWIDTH)+cursor_col] = videoMemChar(' ', console_col);
 }
 
 // Main keyboard handler
@@ -218,9 +242,14 @@ void key_handler_main(void)
 			handleEnter();
 			return;
 		}
+
+		if (keycode == 0x08) {
+			handleBackspace();
+			return;
+		}
 		
 		// display typed character
-		putChar(keyboard_map[(unsigned char) keycode]);
+		putChar(keyboard_map[(unsigned char) keycode], console_col);
 	}
 }
 
@@ -231,8 +260,9 @@ void kernel_main(void)
 	// initialize the kernel
 	kernel_init();
 	// welcome message
-	kprint("vmOS version 0.1.12");
+	kprint("vmOS version 0.1.12", get_color(DGREY,BLACK));
 	printnl();
+	kprint("$ ", get_color(RED,BLACK));
 	// init io
 	idt_init();
 	kb_init();
