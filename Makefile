@@ -13,8 +13,8 @@ all: boot disk test
 
 boot:
 	$(ASM) -f elf32 $(BOOT).asm -o $(BOOT).o
-	$(CC) -m32 -c $(KERNEL).c -o $(KERNEL).o
-	ld -m elf_i386 -T $(LINKER) -o $(KBIN) $(BOOT).o $(KERNEL).o
+	$(CC) -m32 -c $(KERNEL)Call.c -o $(KERNEL)Call.o
+	ld -m elf_i386 -T $(LINKER) -o $(KBIN) $(BOOT).o $(KERNEL)Call.o
 
 disk: boot
 	#grub-mkrescue iso --output=kernel.iso

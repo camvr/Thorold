@@ -52,8 +52,6 @@ struct idt_entry IDT[IDT_SIZE];
 
 extern unsigned char keyboard_map[128];
 extern void key_handler(void);
-extern char rport(unsigned short port);
-extern void wport(unsigned short port, unsigned char data);
 extern void load_idt(unsigned long *idt_p);
 
 size_t cursor_col = 0;
@@ -63,6 +61,25 @@ uint16_t* video_mem = (uint16_t*)0xB8000;
 char* command_in;
 
 /* KERNEL BASE FUNCTIONS */
+
+void outb(uint16_t port, uint8_t val)
+{
+	asm volatile ("outb %1, %0" : : "dN" (port), "a" (val));
+}
+
+uint8_t inb(uint16_t port)
+{
+	uint8_t ret;
+	asm volatile ("inb %1, %0" : "=a" (ret) : "dN" (port));
+	return ret;
+}
+
+uint16_t inw(uint16_t port)
+{
+	uint16_t ret;
+	asm volatile ("inw %1, %0" : "=a" (ret) : "dN" (port));
+	return ret;
+}
 
 // Setup the IDT
 void idt_init(void)
@@ -78,24 +95,24 @@ void idt_init(void)
         IDT[0x21].offset_high = (kb_addr & 0xFFFF0000) >> 16;
 
         // ICW1 - Initialize
-        wport(0x20, 0x11);
-        wport(0xA0, 0x11);
+        outb(0x20, 0x11);
+        outb(0xA0, 0x11);
 
         // ICW2 - Remap offset address of IDT
-        wport(0x21, 0x20);
-        wport(0xA1, 0x28);
+        outb(0x21, 0x20);
+        outb(0xA1, 0x28);
 
         // ICW3 - setup cascading
-        wport(0x21, 0x00);
-        wport(0xA1, 0x00);
+        outb(0x21, 0x00);
+        outb(0xA1, 0x00);
 
         // ICW4 - enviroment info
-        wport(0x21, 0x01);
-        wport(0xA1, 0x01);
+        outb(0x21, 0x01);
+        outb(0xA1, 0x01);
 
         // mask interrupts
-        wport(0x21, 0xFF);
-        wport(0xA1, 0xFF);
+        outb(0x21, 0xFF);
+        outb(0xA1, 0xFF);
 
         idt_addr = (unsigned long)IDT;
         idt_ptr[0] = (sizeof (struct idt_entry) * IDT_SIZE) + ((idt_addr & 0xFFFF) << 16);
@@ -107,7 +124,7 @@ void idt_init(void)
 // Initialize keyboard
 void kb_init(void)
 {
-	wport(0x21, 0xFD);
+	outb(0x21, 0xFD);
 }
 
 // Returns the color code of given fg and bg
@@ -137,11 +154,11 @@ size_t len(const char* string)
 // Update the text mode cursor position
 void update_cursor(void)
 {
-	uint16_t tcursor_loc = 2;//(uint16_t)(cursor_row * VWIDTH) + cursor_col;
-	wport(0x3D4, 14);
-	wport(0x3D5, tcursor_loc >> 8);
-	wport(0x3D4, 15);
-	wport(0x3D5, tcursor_loc);
+	uint16_t tcursor_loc = (uint16_t)(cursor_row * VWIDTH) + cursor_col;
+	outb(0x3D4, 14);
+	outb(0x3D5, tcursor_loc >> 8);
+	outb(0x3D4, 15);
+	outb(0x3D5, tcursor_loc);
 }
 
 // Clears the video_mem
@@ -256,11 +273,11 @@ void key_handler_main(void)
 	char keycode;
 
 	// write EOI
-	wport(0x20, 0x20);
+	outb(0x20, 0x20);
 
-	status = rport(KEYBOARD_STATUS_PORT);
+	status = inb(KEYBOARD_STATUS_PORT);
 	if (status & 0x01) {
-		keycode = rport(KEYBOARD_DATA_PORT);
+		keycode = inb(KEYBOARD_DATA_PORT);
 		if (keycode < 0)
 			return;
 
