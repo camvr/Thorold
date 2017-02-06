@@ -54,8 +54,8 @@ extern unsigned char keyboard_map[128];
 extern void key_handler(void);
 extern void load_idt(unsigned long *idt_p);
 
-size_t cursor_col = 0;
-size_t cursor_row = 0;
+uint16_t cursor_col = 0;
+uint16_t cursor_row = 0;
 uint8_t console_col = 0x0;
 uint16_t* video_mem = (uint16_t*)0xB8000;
 char* command_in;
@@ -154,7 +154,7 @@ size_t len(const char* string)
 // Update the text mode cursor position
 void update_cursor(void)
 {
-	uint16_t tcursor_loc = (uint16_t)(cursor_row * VWIDTH) + cursor_col;
+	uint16_t tcursor_loc = (cursor_row * VWIDTH) + cursor_col;
 	outb(0x3D4, 14);
 	outb(0x3D5, tcursor_loc >> 8);
 	outb(0x3D4, 15);
@@ -181,9 +181,18 @@ void kernel_init(void)
 	console_col = get_color(LGREY, BLACK);
 	video_mem = (uint16_t*)0xB8000;
 	
-	update_cursor();
 	// Clear video_mem
 	clear();
+
+	// welcome message
+        kprint("vmOS", get_color(DGREY,BLACK));
+        printnl();
+        kprint("$ ", get_color(RED,BLACK));
+        // init io
+        idt_init();
+        kb_init();
+
+	update_cursor();
 }
 
 // Set console colour
@@ -216,7 +225,6 @@ void printnl(void)
 	cursor_col = 0;
 	if (++cursor_row == VHEIGHT)
 		scrollScreen();
-	update_cursor();
 }
 
 // Write char to the video_mem
@@ -234,7 +242,7 @@ void putChar(char c, uint8_t col)
 			cursor_row = 0;
 		}
 	}
-	update_cursor();
+	video_mem[(cursor_row*VWIDTH)+cursor_col] = videoMemChar(' ', console_col);
 }
 
 // Write string to the video_mem
@@ -278,22 +286,19 @@ void key_handler_main(void)
 	status = inb(KEYBOARD_STATUS_PORT);
 	if (status & 0x01) {
 		keycode = inb(KEYBOARD_DATA_PORT);
-		if (keycode < 0)
-			return;
-
-		if (keycode == ENTER_KEY_CODE) {
+		if (keycode < 0) {
+		}			
+		else if (keycode == ENTER_KEY_CODE) {
 			handleEnter();
-			return;
 		}
-
-		if (keyboard_map[(unsigned char) keycode] == 0x08) {
+		else if (keyboard_map[(unsigned char) keycode] == 0x08) {
 			handleBackspace();
-			return;
 		}
-		
-		// display typed character
-		putChar(keyboard_map[(unsigned char) keycode], console_col);
-		
+		else {
+			// display typed character
+			putChar(keyboard_map[(unsigned char) keycode], console_col);
+		}
+		update_cursor();
 	}
 }
 
@@ -303,14 +308,7 @@ void kernel_main(void)
 {
 	// initialize the kernel
 	kernel_init();
-	// welcome message
-	kprint("vmOS", get_color(DGREY,BLACK));
-	printnl();
-	kprint("$ ", get_color(RED,BLACK));
-	// init io
-	idt_init();
-	kb_init();
-
+	
 	// hang the kernel
 	while(1);
 }
