@@ -1,6 +1,5 @@
-#include "terminal.h"
+#include "kernel.h"
 #include "keyboard_map.h"
-
 
 /* KERNEL DEFINITIONS */
 
@@ -14,29 +13,38 @@
 #define INT_GATE 0x8E
 #define KERNEL_CODE_SEG_OFFSET 0x08
 
-#define ENTER_KEY_CODE 0x1C
-
 
 /* KERNEL VARIABLES AND CONSTS */
 
 enum color
 {
-        BLACK = 0x0,
-        BLUE = 0x1,
-        GREEN = 0x2,
-        CYAN = 0x3,
-        RED = 0x4,
-        MAGENTA = 0x5,
-        BROWN = 0x6,
-        LGREY = 0x7,
-        DGREY = 0x8,
-        LBLUE = 0x9,
-        LGREEN = 0xA,
-        LCYAN = 0xB,
-        LRED = 0xC,
+        BLACK    = 0x0,
+        BLUE     = 0x1,
+        GREEN    = 0x2,
+        CYAN     = 0x3,
+        RED      = 0x4,
+        MAGENTA  = 0x5,
+        BROWN    = 0x6,
+        LGREY    = 0x7,
+        DGREY    = 0x8,
+        LBLUE    = 0x9,
+        LGREEN   = 0xA,
+        LCYAN    = 0xB,
+        LRED     = 0xC,
         LMAGENTA = 0xD,
-        LBROWN = 0xE,
-        WHITE = 0xF
+        LBROWN   = 0xE,
+        WHITE    = 0xF
+};
+
+enum textMode
+{
+	PUSH,
+	INSERT
+};
+
+struct gdt_entry
+{
+	// TODO implement me
 };
 
 struct idt_entry
@@ -48,6 +56,7 @@ struct idt_entry
 	unsigned short int offset_high;
 };
 
+//struct gdt_entry GDT[];
 struct idt_entry IDT[IDT_SIZE];
 
 extern unsigned char keyboard_map[128];
@@ -58,6 +67,9 @@ uint16_t cursor_col = 0;
 uint16_t cursor_row = 0;
 uint8_t console_col = 0x0;
 uint16_t* video_mem = (uint16_t*)0xB8000;
+uint16_t* video_buffer;
+char* cmd_prompt = "$ ";
+size_t minCol;
 char* command_in;
 
 /* KERNEL BASE FUNCTIONS */
@@ -88,10 +100,10 @@ void idt_init(void)
         unsigned long idt_addr;
         unsigned long idt_ptr[2];
         kb_addr = (unsigned long)key_handler;
-        IDT[0x21].offset_low = kb_addr & 0xFFFF;
-        IDT[0x21].sel = KERNEL_CODE_SEG_OFFSET;
-        IDT[0x21].zero = 0;
-        IDT[0x21].type_attr = INT_GATE;
+        IDT[0x21].offset_low  = kb_addr & 0xFFFF;
+        IDT[0x21].sel         = KERNEL_CODE_SEG_OFFSET;
+        IDT[0x21].zero        = 0;
+        IDT[0x21].type_attr   = INT_GATE;
         IDT[0x21].offset_high = (kb_addr & 0xFFFF0000) >> 16;
 
         // ICW1 - Initialize
@@ -114,7 +126,7 @@ void idt_init(void)
         outb(0x21, 0xFF);
         outb(0xA1, 0xFF);
 
-        idt_addr = (unsigned long)IDT;
+        idt_addr   = (unsigned long)IDT;
         idt_ptr[0] = (sizeof (struct idt_entry) * IDT_SIZE) + ((idt_addr & 0xFFFF) << 16);
         idt_ptr[1] = idt_addr >> 16;
 
@@ -137,7 +149,7 @@ uint8_t get_color(enum color fg, enum color bg)
 // Create a 16 bit integer for writing to video memory
 uint16_t videoMemChar(char c, uint8_t color)
 {
-	uint16_t ch = c;
+	uint16_t ch  = c;
 	uint16_t col = color;
 	return ch | col << 8;
 }
@@ -154,7 +166,10 @@ size_t len(const char* string)
 // Update the text mode cursor position
 void update_cursor(void)
 {
-	uint16_t tcursor_loc = (cursor_row * VWIDTH) + cursor_col;
+	uint16_t tcursor_loc   = (cursor_row * VWIDTH) + cursor_col;
+	uint8_t ch	       = video_buffer[(size_t)tcursor_loc*2];
+	uint8_t col	       = video_buffer[(size_t)(tcursor_loc*2)+1];
+	video_mem[tcursor_loc] = videoMemChar(ch, col);
 	outb(0x3D4, 14);
 	outb(0x3D5, tcursor_loc >> 8);
 	outb(0x3D4, 15);
@@ -166,8 +181,10 @@ void clear(void)
 {
 	size_t i = 0;
 	while (i < SCREENSIZE) {
-		video_mem[i++] = ' ';
-		video_mem[i++] =  console_col;
+		video_buffer[i] = ' ';
+		video_mem[i++]  = ' ';
+		video_buffer[i] = console_col;
+		video_mem[i++]  = console_col;
 	}
 }
 
@@ -176,10 +193,11 @@ void clear(void)
 void kernel_init(void)
 {
 	// default kernel variables
-	cursor_col = 0;
-	cursor_row = 0;
+	cursor_col  = 0;
+	cursor_row  = 0;
 	console_col = get_color(LGREY, BLACK);
-	video_mem = (uint16_t*)0xB8000;
+	minCol      = len(cmd_prompt);
+	video_mem   = (uint16_t*)0xB8000;
 	
 	// Clear video_mem
 	clear();
@@ -187,7 +205,7 @@ void kernel_init(void)
 	// welcome message
         kprint("vmOS", get_color(DGREY,BLACK));
         printnl();
-        kprint("$ ", get_color(RED,BLACK));
+        kprint(cmd_prompt, get_color(RED,BLACK));
         // init io
         idt_init();
         kb_init();
@@ -204,10 +222,10 @@ void setConsoleColor(uint8_t col)
 // Handling scrolling the screen
 void scrollScreen(void)
 {
-	size_t pos = 0;
+	size_t pos    = 0;
 	size_t offset = VWIDTH;
-	cursor_col = 0;
-	cursor_row = VHEIGHT - 1;
+	cursor_col    = 0;
+	cursor_row    = VHEIGHT - 1;
 	while (pos < SCREENSIZE) {
 		if (pos >= SCREENSIZE-(VWIDTH*2)) {
 			video_mem[pos++] = ' ';
@@ -230,7 +248,9 @@ void printnl(void)
 // Write char to the video_mem
 void printChar(char c, uint8_t col, size_t x, size_t y)
 {
-	video_mem[(y*VWIDTH)+x] = videoMemChar(c,col);
+	uint16_t loc      = (y*VWIDTH)+x;
+	video_buffer[loc] = videoMemChar(c,col);
+	video_mem[loc]    = video_buffer[loc];
 }
 
 void putChar(char c, uint8_t col)
@@ -242,7 +262,6 @@ void putChar(char c, uint8_t col)
 			cursor_row = 0;
 		}
 	}
-	video_mem[(cursor_row*VWIDTH)+cursor_col] = videoMemChar(' ', console_col);
 }
 
 // Write string to the video_mem
@@ -263,15 +282,15 @@ void handleEnter(void)
 	// call command parser
 	//kprint(command_in, console_col);
 	printnl();
-	kprint("$ ", get_color(RED,BLACK));
+	kprint(cmd_prompt, get_color(RED,BLACK));
 }
 
 // Handles task of backspace
 void handleBackspace(void)
 {
-	if (--cursor_col == 1)
-		cursor_col = 2;
-	video_mem[(cursor_row*VWIDTH)+cursor_col] = videoMemChar(' ', console_col);
+	if (--cursor_col < minCol)
+		cursor_col = minCol;
+	printChar(' ', console_col, cursor_col, cursor_row);
 }
 
 // Main keyboard handler
@@ -286,13 +305,19 @@ void key_handler_main(void)
 	status = inb(KEYBOARD_STATUS_PORT);
 	if (status & 0x01) {
 		keycode = inb(KEYBOARD_DATA_PORT);
-		if (keycode < 0) {
+		if (keycode <= 0) {
 		}			
-		else if (keycode == ENTER_KEY_CODE) {
+		else if (keycode == 0x1C) {
 			handleEnter();
 		}
 		else if (keyboard_map[(unsigned char) keycode] == 0x08) {
 			handleBackspace();
+		}
+		else if (keycode == 0x4B) {	// Left arrow key TODO fix delete chars
+			if (cursor_col > minCol) --cursor_col;
+		}
+		else if (keycode == 0x4D) {	// Right arrow key TODO fix delete chars
+			if (cursor_col < VWIDTH) ++cursor_col;
 		}
 		else {
 			// display typed character
