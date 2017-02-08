@@ -9,7 +9,7 @@ section .text
 global start
 global key_handler
 global load_idt
-extern k_main
+extern kernel_main
 extern key_handler_main
 
 ; setup
@@ -26,10 +26,12 @@ key_handler:
 ; calling the kernel
 start:
 	cli
-	mov esp, stack_alloc
-	call k_main
+	mov esp, stack
+	push ebx
+	mov ebp, 0
+	call kernel_main
 	hlt
 
 section .bss
-resb 8192
-stack_alloc:
+	resb 8192
+stack:

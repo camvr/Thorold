@@ -16,52 +16,12 @@
 
 /* KERNEL VARIABLES AND CONSTS */
 
-enum color
-{
-        BLACK    = 0x0,
-        BLUE     = 0x1,
-        GREEN    = 0x2,
-        CYAN     = 0x3,
-        RED      = 0x4,
-        MAGENTA  = 0x5,
-        BROWN    = 0x6,
-        LGREY    = 0x7,
-        DGREY    = 0x8,
-        LBLUE    = 0x9,
-        LGREEN   = 0xA,
-        LCYAN    = 0xB,
-        LRED     = 0xC,
-        LMAGENTA = 0xD,
-        LBROWN   = 0xE,
-        WHITE    = 0xF
-};
-
-enum textMode
-{
-	PUSH,
-	INSERT
-};
-
-struct gdt_entry
-{
-	// TODO implement me
-};
-
-struct idt_entry
-{
-	unsigned short int offset_low;
-	unsigned short int sel;
-	unsigned char zero;
-	unsigned char type_attr;
-	unsigned short int offset_high;
-};
-
 //struct gdt_entry GDT[];
 struct idt_entry IDT[IDT_SIZE];
 
 extern unsigned char keyboard_map[128];
-extern void key_handler(void);
-extern void load_idt(unsigned long *idt_p);
+extern "C" void key_handler(void);
+extern "C" void load_idt(unsigned long *idt_p);
 
 uint16_t cursor_col = 0;
 uint16_t cursor_row = 0;
@@ -294,7 +254,7 @@ void handleBackspace(void)
 }
 
 // Main keyboard handler
-void key_handler_main(void)
+extern "C" void key_handler_main(void)
 {
 	unsigned char status;
 	char keycode;
@@ -329,8 +289,9 @@ void key_handler_main(void)
 
 
 // Main function
-void kernel_main(void)
+extern "C" void kernel_main(void)
 {
+	
 	// initialize the kernel
 	kernel_init();
 	
