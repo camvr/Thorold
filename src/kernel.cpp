@@ -1,38 +1,6 @@
-#include "kernel.h"
-#include "keyboard_map.h"
+#include "kernel.hpp"
 
-/* KERNEL DEFINITIONS */
-
-#define VWIDTH 80
-#define VHEIGHT 25
-#define SCREENSIZE 2 * VWIDTH * VHEIGHT
-
-#define KEYBOARD_DATA_PORT 0x60
-#define KEYBOARD_STATUS_PORT 0x64
-#define IDT_SIZE 256
-#define INT_GATE 0x8E
-#define KERNEL_CODE_SEG_OFFSET 0x08
-
-
-/* KERNEL VARIABLES AND CONSTS */
-
-//struct gdt_entry GDT[];
-struct idt_entry IDT[IDT_SIZE];
-
-extern unsigned char keyboard_map[128];
-extern "C" void key_handler(void);
-extern "C" void load_idt(unsigned long *idt_p);
-
-uint16_t cursor_col = 0;
-uint16_t cursor_row = 0;
-uint8_t console_col = 0x0;
-uint16_t* video_mem = (uint16_t*)0xB8000;
-uint16_t* video_buffer;
-char* cmd_prompt = "$ ";
-size_t minCol;
-char* command_in;
-
-/* KERNEL BASE FUNCTIONS */
+/* KERNEL METHOD DECLARATIONS */
 
 void outb(uint16_t port, uint8_t val)
 {
