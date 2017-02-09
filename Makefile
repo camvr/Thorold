@@ -1,6 +1,6 @@
 ASM=nasm
 CC=g++
-CFLAGS=-ffreestanding -O2 -Wall -Wextra -fno-exceptions -fno-rtti
+CFLAGS=-m32 -c -ffreestanding -O2 -Wall -Wextra -fno-exceptions -fno-rtti
 VM=qemu-system-i386
 KVERSION=001
 
@@ -14,9 +14,9 @@ all: boot disk test
 
 boot:
 	$(ASM) -f elf $(BOOT).asm -o $(BOOT).o
-	$(CC) -m32 -c $(KERNEL).cpp -o $(KERNEL).o $(CFLAGS)
-	cd src && $(CC) -m32 *.cpp
-	ld -m elf_i386 -T $(LINKER) -o $(KBIN) $(BOOT).o $(KERNEL).o
+	$(CC) $(CFLAGS) $(KERNEL).cpp -o $(KERNEL).o
+	cd src && $(CC) $(CFLAGS) *.cpp
+	ld -m elf_i386 -T $(LINKER) -o $(KBIN) src/*.o
 
 disk: boot
 	#grub-mkrescue iso --output=kernel.iso
