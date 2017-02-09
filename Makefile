@@ -15,6 +15,7 @@ all: boot disk test
 boot:
 	$(ASM) -f elf $(BOOT).asm -o $(BOOT).o
 	$(CC) -m32 -c $(KERNEL).cpp -o $(KERNEL).o $(CFLAGS)
+	cd src && $(CC) -m32 *.cpp
 	ld -m elf_i386 -T $(LINKER) -o $(KBIN) $(BOOT).o $(KERNEL).o
 
 disk: boot

@@ -2,25 +2,6 @@
 
 /* KERNEL METHOD DECLARATIONS */
 
-void outb(uint16_t port, uint8_t val)
-{
-	asm volatile ("outb %1, %0" : : "dN" (port), "a" (val));
-}
-
-uint8_t inb(uint16_t port)
-{
-	uint8_t ret;
-	asm volatile ("inb %1, %0" : "=a" (ret) : "dN" (port));
-	return ret;
-}
-
-uint16_t inw(uint16_t port)
-{
-	uint16_t ret;
-	asm volatile ("inw %1, %0" : "=a" (ret) : "dN" (port));
-	return ret;
-}
-
 // Setup the IDT
 void idt_init(void)
 {
@@ -68,157 +49,22 @@ void kb_init(void)
 }
 
 // Returns the color code of given fg and bg
-
-uint8_t get_color(enum color fg, enum color bg)
-{
-	return fg | bg << 4;
-}
-
-// Create a 16 bit integer for writing to video memory
-uint16_t videoMemChar(char c, uint8_t color)
-{
-	uint16_t ch  = c;
-	uint16_t col = color;
-	return ch | col << 8;
-}
-
-// Returns the length of a string
-size_t len(const char* string)
-{
-	size_t length = 0;
-	while (string[length] != 0)
-		length++;
-	return length;
-}
-
-// Update the text mode cursor position
-void update_cursor(void)
-{
-	uint16_t tcursor_loc   = (cursor_row * VWIDTH) + cursor_col;
-	uint8_t ch	       = video_buffer[(size_t)tcursor_loc*2];
-	uint8_t col	       = video_buffer[(size_t)(tcursor_loc*2)+1];
-	video_mem[tcursor_loc] = videoMemChar(ch, col);
-	outb(0x3D4, 14);
-	outb(0x3D5, tcursor_loc >> 8);
-	outb(0x3D4, 15);
-	outb(0x3D5, tcursor_loc);
-}
-
-// Clears the video_mem
-void clear(void)
-{
-	size_t i = 0;
-	while (i < SCREENSIZE) {
-		video_buffer[i] = ' ';
-		video_mem[i++]  = ' ';
-		video_buffer[i] = console_col;
-		video_mem[i++]  = console_col;
-	}
-}
-
-
-// Initialize kernel
+// initialize kernel
 void kernel_init(void)
 {
 	// default kernel variables
-	cursor_col  = 0;
-	cursor_row  = 0;
-	console_col = get_color(LGREY, BLACK);
-	minCol      = len(cmd_prompt);
-	video_mem   = (uint16_t*)0xB8000;
-	
-	// Clear video_mem
-	clear();
+	// Initialize video
+	init_video();
 
 	// welcome message
         kprint("vmOS", get_color(DGREY,BLACK));
         printnl();
-        kprint(cmd_prompt, get_color(RED,BLACK));
+        printCmdPrompt();
         // init io
         idt_init();
         kb_init();
 
 	update_cursor();
-}
-
-// Set console colour
-void setConsoleColor(uint8_t col)
-{
-	console_col = col;
-}
-
-// Handling scrolling the screen
-void scrollScreen(void)
-{
-	size_t pos    = 0;
-	size_t offset = VWIDTH;
-	cursor_col    = 0;
-	cursor_row    = VHEIGHT - 1;
-	while (pos < SCREENSIZE) {
-		if (pos >= SCREENSIZE-(VWIDTH*2)) {
-			video_mem[pos++] = ' ';
-			video_mem[pos++] = console_col;
-		} else {
-			video_mem[pos++] = video_mem[offset++];
-			video_mem[pos++] = video_mem[offset++];
-		}
-	}
-}
-
-// Goes to newline
-void printnl(void)
-{
-	cursor_col = 0;
-	if (++cursor_row == VHEIGHT)
-		scrollScreen();
-}
-
-// Write char to the video_mem
-void printChar(char c, uint8_t col, size_t x, size_t y)
-{
-	uint16_t loc      = (y*VWIDTH)+x;
-	video_buffer[loc] = videoMemChar(c,col);
-	video_mem[loc]    = video_buffer[loc];
-}
-
-void putChar(char c, uint8_t col)
-{
-	printChar(c, col, cursor_col, cursor_row);
-	if (++cursor_col == VWIDTH) {
-		cursor_col = 0;
-		if (++cursor_row == VHEIGHT) {
-			cursor_row = 0;
-		}
-	}
-}
-
-// Write string to the video_mem
-void kprint(const char* str, uint8_t col)
-{
-	size_t strLen = len(str);
-	size_t i;
-	for (i = 0; i < strLen; i++)
-		putChar(str[i], col);
-}
-
-// Handles task of enter key
-void handleEnter(void)
-{
-	printnl();
-
-	// Command line
-	// call command parser
-	//kprint(command_in, console_col);
-	printnl();
-	kprint(cmd_prompt, get_color(RED,BLACK));
-}
-
-// Handles task of backspace
-void handleBackspace(void)
-{
-	if (--cursor_col < minCol)
-		cursor_col = minCol;
-	printChar(' ', console_col, cursor_col, cursor_row);
 }
 
 // Main keyboard handler
@@ -242,14 +88,14 @@ extern "C" void key_handler_main(void)
 			handleBackspace();
 		}
 		else if (keycode == 0x4B) {	// Left arrow key TODO fix delete chars
-			if (cursor_col > minCol) --cursor_col;
+			// handleKey
 		}
 		else if (keycode == 0x4D) {	// Right arrow key TODO fix delete chars
-			if (cursor_col < VWIDTH) ++cursor_col;
+			// handleKey	
 		}
 		else {
 			// display typed character
-			putChar(keyboard_map[(unsigned char) keycode], console_col);
+			putChar(keyboard_map[(unsigned char) keycode]);
 		}
 		update_cursor();
 	}
@@ -259,7 +105,6 @@ extern "C" void key_handler_main(void)
 // Main function
 extern "C" void kernel_main(void)
 {
-	
 	// initialize the kernel
 	kernel_init();
 	
